@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	gh "github.com/nov1n/guitarhero/game"
 )
@@ -10,7 +13,16 @@ import (
 var game *gh.Game
 
 func main() {
-	game = gh.NewGame()
+	// Get name
+	fmt.Print("Enter your name: ")
+	r := bufio.NewReader(os.Stdin)
+	name, err := r.ReadString('\n')
+	if err != nil {
+		panic(err)
+	}
+	name = strings.TrimSpace(name)
+
+	game = gh.NewGame(name)
 	game.Initialize()
 	go captureInput()
 	game.Loop()
@@ -36,5 +48,5 @@ func captureInput() {
 	}
 
 	// Eventually reenable echoing
-	defer exec.Command("stty", "-F", "/dev/tty", "echo").Run()
+	defer exec.Command("stty", "-F", "/dev/tty", "+echo").Run()
 }
