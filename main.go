@@ -7,10 +7,7 @@ import (
 	gh "github.com/nov1n/guitarhero/game"
 )
 
-var (
-	game   *gh.Game
-	points = 0
-)
+var game *gh.Game
 
 func main() {
 	game = gh.NewGame()

@@ -11,14 +11,18 @@ import (
 )
 
 var (
-	horizontalBarIndex = 4
+	defaultFps = 6
+	barIndex   = 20
+	halfSymbol = "/"
+	fullSymbol = "*"
 )
 
 type Game struct {
+	fps    int
 	width  int
 	height int
 	screen []string
-	points int
+	score  int
 	keys   []string
 }
 
@@ -31,10 +35,11 @@ func NewGame() *Game {
 	sh := th - 1 // allow 2 lines for user input
 
 	return &Game{
+		fps:    defaultFps,
 		width:  tw,
 		height: sh,
 		screen: []string{},
-		points: 0,
+		score:  0,
 		keys:   []string{"a", "s", "d", "f"},
 	}
 }
@@ -45,14 +50,60 @@ func (g *Game) clear() {
 	cmd.Run()
 }
 
-func (g *Game) addPoints(n int) {
-	g.points += n
+func (g *Game) addScore(n int) {
+	g.score += n
 }
 
 func (g *Game) KeyPressed(k string) {
-	line := g.screen[horizontalBarIndex]
-	if strings.Contains(line, k) {
-		g.addPoints(100)
+	g.updateScore(k)
+}
+
+func (g *Game) updateScore(k string) {
+	full := g.screen[barIndex]
+	belowHalf := g.screen[barIndex-1]
+	aboveHalf := g.screen[barIndex+1]
+
+	hit := false
+
+	// Full
+	if strings.Contains(full, k) {
+		hit = true
+		// Mark the note as hit
+		g.changeLine(barIndex, strings.Replace(g.screen[barIndex], k, fullSymbol, 1))
+
+		g.addScore(100)
+
+		// Remove k from the half point strings to prevent double count
+		belowHalf = strings.Replace(belowHalf, k, " ", 1)
+		aboveHalf = strings.Replace(aboveHalf, k, " ", 1)
+	}
+
+	// Below
+	if strings.Contains(belowHalf, k) {
+		hit = true
+		// Mark the note as hit
+		g.changeLine(barIndex-1, strings.Replace(g.screen[barIndex-1], k, halfSymbol, 1))
+
+		// Remove k from next half point string to prevent double count
+		aboveHalf = strings.Replace(aboveHalf, k, " ", 1)
+
+		g.addScore(50)
+	}
+
+	// Above
+	if strings.Contains(aboveHalf, k) {
+		hit = true
+		// Mark the note as hit
+		g.changeLine(barIndex+1, strings.Replace(g.screen[barIndex+1], k, halfSymbol, 1))
+
+		g.addScore(50)
+	}
+
+	// Miss
+	if !hit {
+		g.changeLine(barIndex, strings.Replace(g.screen[barIndex], " ", "-", -1))
+
+		g.addScore(-50)
 	}
 }
 
@@ -102,15 +153,15 @@ func (g *Game) render() {
 
 	for i := g.height - 1; i >= 0; i-- {
 		line := g.screen[i]
-		if i == 3 || i == 5 { // Draw the horizontal lines
+		if i == barIndex+1 || i == barIndex-1 { // Draw the horizontal lines
 			line = strings.Replace(g.screen[i], " ", "-", -1)
 		}
 
-		var points string
-		if i == horizontalBarIndex {
-			points = fmt.Sprintf("points: %d", g.points)
+		var score string
+		if i == barIndex {
+			score = fmt.Sprintf("score: %d", g.score)
 		}
-		fmt.Printf("%s % 10d   %s\n", line, i, points)
+		fmt.Printf("%s % 10d   %s\n", line, i, score)
 	}
 	fmt.Println("") // Gives one extra whitespace at the bottom
 }
@@ -145,7 +196,8 @@ func getTerminalDims() (int, int, error) {
 }
 
 func (g *Game) Loop() {
-	t := time.Tick(250 * time.Millisecond)
+	t := time.Tick(time.Duration(1000/g.fps) * time.Millisecond)
+	r := time.After(30 * time.Second)
 
 	for {
 		select {
@@ -156,6 +208,10 @@ func (g *Game) Loop() {
 				g.appendFret()
 			}
 			g.render()
+			break
+		case <-r:
+			fmt.Printf("Congratulations, your score was%d\n", g.score)
+			os.Exit(0)
 		}
 	}
 
