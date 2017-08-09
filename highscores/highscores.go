@@ -1,4 +1,4 @@
-package game
+package highscore
 
 import (
 	"bufio"
@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	fileName = "highscores"
+	fileName = "highscore"
 	showN    = 5
 )
 
@@ -44,7 +44,7 @@ type Highscores struct {
 	entries []highscore
 }
 
-func NewHighscores() *Highscores {
+func New() *Highscores {
 	f, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDONLY, 0666)
 	defer f.Close()
 	if err != nil {

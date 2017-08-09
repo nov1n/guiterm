@@ -2,32 +2,32 @@ package game
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	highscores "github.com/nov1n/guitarhero/highscores"
+	stats "github.com/nov1n/guitarhero/stats"
 )
 
 var (
-	defaultFps    = 7
-	maxStreak     = 9
-	debugIndex    = 0
-	barIndex      = 3
-	missIndex     = barIndex - 2
-	scoreIndex    = 3
-	timeIndex     = 2
-	streakIndex   = 4
-	flameIndex    = 5
-	multiplierInc = 10
-	roundLength   = 30 * time.Second
-	debugString   = ""
-	defaultKeys   = []string{"u", "i", "o", "p"}
-	halfSymbol    = "+"
-	fullSymbol    = "-"
-	flame         = `
+	defaultFps  = 7
+	debugIndex  = 0
+	barIndex    = 3
+	missIndex   = barIndex - 2
+	scoreIndex  = 3
+	timeIndex   = 2
+	streakIndex = 4
+	flameIndex  = 5
+	roundLength = 30 * time.Second
+	debugString = ""
+	defaultKeys = []string{"u", "i", "o", "p"}
+	halfSymbol  = "+"
+	fullSymbol  = "-"
+	flame       = `
   )
  ) \
 / ) (
@@ -36,23 +36,18 @@ var (
 )
 
 type Game struct {
-	name          string
-	fps           int
-	streak        int
-	lastScore     int
-	timeLeft      time.Duration
-	totalNotes    int
-	correctNotes  int
-	mistakenNotes int
-	width         int
-	height        int
-	screen        []string
-	score         int
-	keys          []string
-	highscores    *Highscores
+	name       string
+	fps        int
+	timeLeft   time.Duration
+	width      int
+	height     int
+	screen     []string
+	keys       []string
+	highscores *highscores.Highscores
+	stats      *stats.Stats
 }
 
-func NewGame(n string) *Game {
+func New(n string) *Game {
 	rand.Seed(time.Now().UTC().UnixNano())
 	tw, th, err := getTerminalDims()
 	if err != nil {
@@ -62,20 +57,15 @@ func NewGame(n string) *Game {
 	sh := th - 1 // allow 2 lines for user input
 
 	return &Game{
-		name:          n,
-		fps:           defaultFps,
-		streak:        0,
-		lastScore:     0,
-		totalNotes:    0,
-		correctNotes:  0,
-		mistakenNotes: 0,
-		timeLeft:      roundLength,
-		width:         tw,
-		height:        sh,
-		screen:        []string{},
-		score:         0,
-		keys:          defaultKeys,
-		highscores:    NewHighscores(),
+		name:       n,
+		fps:        defaultFps,
+		timeLeft:   roundLength,
+		width:      tw,
+		height:     sh,
+		screen:     []string{},
+		keys:       defaultKeys,
+		stats:      stats.New(),
+		highscores: highscores.New(),
 	}
 }
 
@@ -83,15 +73,6 @@ func (g *Game) clear() {
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
 	cmd.Run()
-}
-
-func (g *Game) addScore(n int) {
-	g.lastScore = n
-	g.score += n
-
-	if g.score < 0 {
-		g.score = 0
-	}
 }
 
 func (g *Game) KeyPressed(k string) {
@@ -110,17 +91,12 @@ func (g *Game) updateScore(k string) {
 	wrongKey := !strings.Contains((full + belowHalf + aboveHalf), k)
 	invalidKey := !strings.Contains(strings.Join(g.keys, ""), k)
 	if invalidKey || wrongKey {
-		g.mistakenNotes += 1
-		g.streak = 0
-
-		g.addScore(-g.halfScore())
+		g.stats.Incorrect()
 		return
 	}
 
 	// From here on the note was correct
-
-	g.correctNotes += 1
-	g.totalNotes += 1
+	g.stats.Correct()
 
 	// Check half below
 	if strings.Contains(belowHalf, k) {
@@ -131,7 +107,7 @@ func (g *Game) updateScore(k string) {
 		aboveHalf = strings.Replace(aboveHalf, k, "", 1)
 		full = strings.Replace(full, k, "", 1)
 
-		g.addScore(g.halfScore())
+		g.stats.Add(stats.Half)
 	}
 
 	// Check full
@@ -139,7 +115,7 @@ func (g *Game) updateScore(k string) {
 		// Mark the note as hit
 		g.changeLine(barIndex, strings.Replace(g.screen[barIndex], k, fullSymbol, 1))
 
-		g.addScore(g.fullScore())
+		g.stats.Add(stats.Full)
 
 		// Remove k from the half point strings to prevent double count
 		aboveHalf = strings.Replace(aboveHalf, k, "", 1)
@@ -150,15 +126,8 @@ func (g *Game) updateScore(k string) {
 		// Mark the note as hit
 		g.changeLine(barIndex+1, strings.Replace(g.screen[barIndex+1], k, halfSymbol, 1))
 
-		g.addScore(g.halfScore())
+		g.stats.Add(stats.Half)
 	}
-
-	// Add to streak
-	g.streak += 1
-}
-
-func (g *Game) multiplier() int {
-	return int(math.Min(float64(1+(g.streak/multiplierInc)), float64(maxStreak)))
 }
 
 func (g *Game) Initialize() {
@@ -226,13 +195,13 @@ func (g *Game) render() {
 
 		var sidebar string
 		if i == scoreIndex {
-			sidebar = fmt.Sprintf("score: %d (%d%%) %d", g.score, g.accuracy(), g.lastScore)
+			sidebar = fmt.Sprintf("score: %d (%d%%) %d", g.stats.Score, g.stats.Accuracy(), g.stats.LastNote)
 		}
 		if i == timeIndex {
 			sidebar = fmt.Sprintf("time: %d", int(g.timeLeft.Seconds()))
 		}
 		if i == streakIndex {
-			sidebar = fmt.Sprintf("%d (%dx)", g.streak, g.multiplier())
+			sidebar = fmt.Sprintf("%d (%dx)", g.stats.Streak, g.stats.Multiplier())
 		}
 		if i == debugIndex {
 			sidebar = fmt.Sprintf("%s", debugString)
@@ -240,7 +209,7 @@ func (g *Game) render() {
 
 		// Draw flame
 		f := strings.Split(flame, "\n")
-		for j := 0; j < len(f) && g.multiplier() > 1; j++ {
+		for j := 0; j < len(f) && g.stats.Multiplier() > 1; j++ {
 			if i == (j + flameIndex) {
 				sidebar = f[len(f)-j-1]
 			}
@@ -258,14 +227,12 @@ func (g *Game) frameLogic() {
 	missLine := g.screen[missIndex]
 	miss := strings.ContainsAny(missLine, strings.Join(g.keys, ""))
 	if miss {
-		g.streak = 0
-		g.mistakenNotes += 1
-		g.addScore(-g.halfScore())
+		g.stats.Incorrect()
 	}
 
 	// Count total notes
 	if strings.ContainsAny(missLine, strings.Join(g.keys, "")) {
-		g.totalNotes += 1
+		g.stats.TotalNotesAdd(1)
 	}
 }
 
@@ -326,27 +293,12 @@ func (g *Game) Loop() {
 func (g *Game) showFinalScreen() {
 	g.clear()
 
-	fmt.Printf("Congratulations, your score was %d (%d%%)!\n", g.score, g.accuracy())
-	fmt.Printf("Correct: %d, Mistakes: %d, Total: %d\n", g.correctNotes, g.mistakenNotes, g.totalNotes)
+	fmt.Printf("Congratulations, your score was %d (%d%%)!\n", g.stats.Score, g.stats.Accuracy())
+	fmt.Printf("Correct: %d, Mistakes: %d, Total: %d\n", g.stats.CorrectNotes, g.stats.MistakenNotes, g.stats.TotalNotes)
 	fmt.Println()
 
-	g.highscores.Add(g.name, g.score, g.correctNotes, g.totalNotes)
+	g.highscores.Add(g.name, g.stats.Score, g.stats.CorrectNotes, g.stats.TotalNotes)
 	fmt.Println(g.highscores.String())
-}
-
-func (g *Game) halfScore() int {
-	return 50 * g.multiplier()
-}
-
-func (g *Game) fullScore() int {
-	return 2 * g.halfScore()
-}
-
-func (g *Game) accuracy() int {
-	if g.totalNotes == 0 {
-		return 0
-	}
-	return int(math.Max(float64(g.correctNotes)/(float64(g.totalNotes)+float64(g.mistakenNotes))*100, 0))
 }
 
 func debug(s interface{}) {

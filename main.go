@@ -22,7 +22,7 @@ func main() {
 	}
 	name = strings.TrimSpace(name)
 
-	game = gh.NewGame(name)
+	game = gh.New(name)
 	game.Initialize()
 	go captureInput()
 	game.Loop()
