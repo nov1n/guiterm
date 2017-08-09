@@ -14,20 +14,21 @@ import (
 )
 
 var (
-	defaultFps  = 7
-	debugIndex  = 0
-	barIndex    = 3
-	missIndex   = barIndex - 2
-	scoreIndex  = 3
-	timeIndex   = 2
-	streakIndex = 4
-	flameIndex  = 5
-	roundLength = 30 * time.Second
-	debugString = ""
-	defaultKeys = []string{"u", "i", "o", "p"}
-	halfSymbol  = "+"
-	fullSymbol  = "-"
-	flame       = `
+	defaultFps     = 6
+	debugIndex     = 0
+	missIndex      = barIndex - 2
+	timeIndex      = 2
+	barIndex       = 3
+	scoreIndex     = 3
+	streakIndex    = 4
+	flameIndex     = 5
+	shortcutsIndex = 38
+	roundLength    = 30 * time.Second
+	debugString    = ""
+	defaultKeys    = []string{"j", "k", "l", ";"}
+	halfSymbol     = ">"
+	fullSymbol     = "v"
+	flame          = `
   )
  ) \
 / ) (
@@ -36,15 +37,19 @@ var (
 )
 
 type Game struct {
-	name       string
-	fps        int
-	timeLeft   time.Duration
-	width      int
-	height     int
-	screen     []string
-	keys       []string
-	highscores *highscores.Highscores
-	stats      *stats.Stats
+	name             string
+	fps              int
+	timeLeft         time.Duration
+	width            int
+	height           int
+	screen           []string
+	keys             []string
+	highscores       *highscores.Highscores
+	stats            *stats.Stats
+	stopChan         chan int
+	restartChan      chan int
+	pauseUnpauseChan chan int
+	paused           bool
 }
 
 func New(n string) *Game {
@@ -57,15 +62,19 @@ func New(n string) *Game {
 	sh := th - 1 // allow 2 lines for user input
 
 	return &Game{
-		name:       n,
-		fps:        defaultFps,
-		timeLeft:   roundLength,
-		width:      tw,
-		height:     sh,
-		screen:     []string{},
-		keys:       defaultKeys,
-		stats:      stats.New(),
-		highscores: highscores.New(),
+		name:             n,
+		fps:              defaultFps,
+		timeLeft:         roundLength,
+		width:            tw,
+		height:           sh,
+		screen:           []string{},
+		keys:             defaultKeys,
+		stats:            stats.New(),
+		highscores:       highscores.New(),
+		stopChan:         make(chan int, 1),
+		restartChan:      make(chan int, 1),
+		pauseUnpauseChan: make(chan int, 1),
+		paused:           false,
 	}
 }
 
@@ -76,6 +85,22 @@ func (g *Game) clear() {
 }
 
 func (g *Game) KeyPressed(k string) {
+	switch k {
+	case "q":
+		g.Stop()
+		return
+	case "r":
+		g.Restart()
+		return
+	case "p":
+		g.PauseUnpause()
+		return
+	}
+
+	if g.paused {
+		return
+	}
+
 	g.updateScore(k)
 
 	// Rerender to skip frame logic
@@ -203,6 +228,18 @@ func (g *Game) render() {
 		if i == streakIndex {
 			sidebar = fmt.Sprintf("%d (%dx)", g.stats.Streak, g.stats.Multiplier())
 		}
+		if i == shortcutsIndex {
+			sidebar = "Shortcuts:"
+		}
+		if i == shortcutsIndex-1 {
+			sidebar = fmt.Sprintf("(r) restart")
+		}
+		if i == shortcutsIndex-2 {
+			sidebar = fmt.Sprintf("(q) quit")
+		}
+		if i == shortcutsIndex-3 {
+			sidebar = fmt.Sprintf("(p) pause/resume")
+		}
 		if i == debugIndex {
 			sidebar = fmt.Sprintf("%s", debugString)
 		}
@@ -265,6 +302,21 @@ func getTerminalDims() (int, int, error) {
 	return w, h, err
 }
 
+func (g *Game) Stop() {
+	g.stopChan <- 1
+}
+
+func (g *Game) Restart() {
+	g.restartChan <- 1
+}
+
+func (g *Game) PauseUnpause() {
+	if !g.Finished() { // Game is not finished (which also uses pause = true for now)
+		g.paused = !g.paused
+		g.pauseUnpauseChan <- 1
+	}
+}
+
 func (g *Game) Loop() {
 	frameLength := time.Duration(1000/g.fps) * time.Millisecond
 	t := time.Tick(frameLength)
@@ -282,12 +334,31 @@ func (g *Game) Loop() {
 
 			g.advanceFrame()
 
-			if g.timeLeft <= 0 {
+			if g.Finshed() {
+				t = nil // Stop ticking
+				g.paused = true
 				g.showFinalScreen()
-				os.Exit(0)
 			}
+			break
+		case <-g.pauseUnpauseChan:
+			if t == nil {
+				t = time.Tick(frameLength)
+			} else {
+				t = nil
+			}
+		case <-g.stopChan:
+			return
+		case <-g.restartChan:
+			*g = *New(g.name) // Reassign main's reference to game to a new one
+			g.Initialize()
+			g.Loop()
+			return
 		}
 	}
+}
+
+func (g *Game) Finished() {
+	return g.timeLeft <= 0
 }
 
 func (g *Game) showFinalScreen() {
@@ -299,6 +370,9 @@ func (g *Game) showFinalScreen() {
 
 	g.highscores.Add(g.name, g.stats.Score, g.stats.CorrectNotes, g.stats.TotalNotes)
 	fmt.Println(g.highscores.String())
+
+	fmt.Println()
+	fmt.Println("Press 'r' to restart or 'q' to quit.")
 }
 
 func debug(s interface{}) {
