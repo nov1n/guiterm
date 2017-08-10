@@ -27,12 +27,10 @@ var (
 	debugString    = ""
 	keys           = "jkl;"
 	keyColors      = []string{colors.GreenBackground, colors.RedBackground, colors.YellowBackground, colors.BlueBackground}
-	flame          = `
-  )
+	flame          = `  )
  ) \
 / ) (
-\(_)/
-`
+\(_)/`
 )
 
 type Game struct {
@@ -253,10 +251,23 @@ func (g *Game) render() {
 		}
 
 		// Draw flame
-		f := strings.Split(flame, "\n")
-		for j := 0; j < len(f) && g.stats.Multiplier() > 1; j++ {
-			if i == (j + flameIndex) {
-				sidebar = f[len(f)-j-1]
+		mul := g.stats.Multiplier()
+		if mul > 1 {
+			f := strings.Split(flame, "\n")
+			flameColors := []string{colors.White, colors.Red, colors.Blue}
+			primaryFlameColor := flameColors[(mul-2)/(len(f))]
+			secondaryFlameColor := flameColors[(mul-2)/len(f)+1]
+			divIndex := (mul - 2) % len(f)
+			debug(fmt.Sprintf("%d, %d, %d", mul/(len(f)), mul/len(f)+1, mul%len(f)))
+
+			for j := 0; j < len(f); j++ {
+				if i == (j + flameIndex) {
+					if j > divIndex {
+						sidebar = colors.Color(f[len(f)-j-1], primaryFlameColor)
+					} else {
+						sidebar = colors.Color(f[len(f)-j-1], secondaryFlameColor)
+					}
+				}
 			}
 		}
 

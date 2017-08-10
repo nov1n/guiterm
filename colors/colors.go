@@ -5,6 +5,7 @@ import "fmt"
 const (
 	BlackOnWhite     = "\x1b[3;1m"
 	Underline        = "\x1b[4;1m"
+	White            = "\x1b[29;1m"
 	Grey             = "\x1b[30;1m"
 	Red              = "\x1b[31;1m"
 	Green            = "\x1b[32;1m"
@@ -19,6 +20,7 @@ const (
 	BlueBackground   = "\x1b[44;1m"
 	PinkBackground   = "\x1b[45;1m"
 	AzureBackground  = "\x1b[46;1m"
+	WhiteBackground  = "\x1b[47;1m"
 
 	Normal = "\x1b[0m"
 )

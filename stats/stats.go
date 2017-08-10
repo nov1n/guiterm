@@ -7,7 +7,7 @@ import (
 const (
 	Half          = 50
 	Full          = 100
-	multiplierInc = 10
+	multiplierInc = 2
 	maxStreak     = 9
 )
 
