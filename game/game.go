@@ -14,28 +14,35 @@ import (
 )
 
 var (
-	fps            = 6
-	debugIndex     = 0
-	missIndex      = barIndex - 2
-	timeIndex      = 2
-	barIndex       = 3
-	scoreIndex     = 3
-	streakIndex    = 4
-	flameIndex     = 5
-	shortcutsIndex = 38
-	roundLength    = 30 * time.Second
-	debugString    = ""
-	keys           = "jkl;"
-	keyColors      = []string{colors.GreenBackground, colors.RedBackground, colors.YellowBackground, colors.BlueBackground}
-	flame          = `  )
+	debugString = ""
+	keys        = "jkl;"
+	keyColors   = []string{colors.GreenBackground, colors.RedBackground,
+		colors.YellowBackground, colors.BlueBackground}
+	flame = `  )
  ) \
 / ) (
 \(_)/`
+
+	// Indexes
+	debugIndex     = 0
+	barIndex       = 3
+	missIndex      = barIndex - 2
+	timeIndex      = barIndex - 1
+	scoreIndex     = barIndex
+	streakIndex    = barIndex + 1
+	flameIndex     = barIndex + 2
+	shortcutsIndex = barIndex + 10
+
+	// Defaults
+	roundLength = 30 * time.Second
+	fps         = 7 // speed
+	difficulty  = 6 // [0,10)
 )
 
 type Game struct {
 	name             string
 	fps              int
+	difficulty       int
 	timeLeft         time.Duration
 	width            int
 	height           int
@@ -43,7 +50,7 @@ type Game struct {
 	keys             string
 	highscores       *highscores.Highscores
 	stats            *stats.Stats
-	stopChan         chan int
+	quitChan         chan int
 	restartChan      chan int
 	pauseUnpauseChan chan int
 	paused           bool
@@ -56,11 +63,12 @@ func New(n string) *Game {
 		panic(err)
 	}
 
-	sh := th - 1 // allow 2 lines for user input
+	sh := th - 2 // allow 2 lines for user input
 
 	return &Game{
 		name:             n,
 		fps:              fps,
+		difficulty:       difficulty,
 		timeLeft:         roundLength,
 		width:            tw,
 		height:           sh,
@@ -68,7 +76,7 @@ func New(n string) *Game {
 		keys:             keys,
 		stats:            stats.New(),
 		highscores:       highscores.New(),
-		stopChan:         make(chan int, 1),
+		quitChan:         make(chan int, 1),
 		restartChan:      make(chan int, 1),
 		pauseUnpauseChan: make(chan int, 1),
 		paused:           false,
@@ -238,13 +246,13 @@ func (g *Game) render() {
 			sidebar = "Shortcuts:"
 		}
 		if i == shortcutsIndex-1 {
-			sidebar = fmt.Sprintf(colors.Color("(r) restart", colors.Red))
+			sidebar = "(r) restart"
 		}
 		if i == shortcutsIndex-2 {
-			sidebar = fmt.Sprintf(colors.Color("(q) quit", colors.Red))
+			sidebar = "(q) quit"
 		}
 		if i == shortcutsIndex-3 {
-			sidebar = fmt.Sprintf(colors.Color("(p) pause/resume", colors.Red))
+			sidebar = "(p) pause/resume"
 		}
 		if i == debugIndex {
 			sidebar = fmt.Sprintf("%s", debugString)
@@ -254,11 +262,10 @@ func (g *Game) render() {
 		mul := g.stats.Multiplier()
 		if mul > 1 {
 			f := strings.Split(flame, "\n")
-			flameColors := []string{colors.White, colors.Red, colors.Blue}
+			flameColors := []string{colors.ThinGrey, colors.ThinWhite, colors.White}
 			primaryFlameColor := flameColors[(mul-2)/(len(f))]
 			secondaryFlameColor := flameColors[(mul-2)/len(f)+1]
 			divIndex := (mul - 2) % len(f)
-			debug(fmt.Sprintf("%d, %d, %d", mul/(len(f)), mul/len(f)+1, mul%len(f)))
 
 			for j := 0; j < len(f); j++ {
 				if i == (j + flameIndex) {
@@ -309,7 +316,7 @@ func getTerminalDims() (h int, w int, err error) {
 }
 
 func (g *Game) Stop() {
-	g.stopChan <- 1
+	g.quitChan <- 1
 }
 
 func (g *Game) Restart() {
@@ -327,7 +334,7 @@ func (g *Game) Loop() {
 	for {
 		select {
 		case <-t:
-			if rand.Intn(2) == 0 {
+			if rand.Intn(10) > (10 - difficulty) {
 				g.appendRandomNote()
 			} else {
 				g.appendFret()
@@ -350,7 +357,9 @@ func (g *Game) Loop() {
 				t = nil
 			}
 			break
-		case <-g.stopChan:
+		case <-g.quitChan:
+			// Reset terminfo
+			fmt.Print(colors.Color("", colors.Normal))
 			return
 		case <-g.restartChan:
 			*g = *New(g.name) // Reassign main's reference to game to a new one
