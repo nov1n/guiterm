@@ -65,5 +65,6 @@ func (s *Stats) Correct() {
 func (s *Stats) Incorrect() {
 	s.Streak = 0
 	s.MistakenNotes += 1
+	s.TotalNotes += 1
 	s.Add(-Half)
 }

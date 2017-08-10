@@ -5,16 +5,16 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/nov1n/guitarhero/colors"
 	highscores "github.com/nov1n/guitarhero/highscores"
 	stats "github.com/nov1n/guitarhero/stats"
 )
 
 var (
-	defaultFps     = 6
+	fps            = 6
 	debugIndex     = 0
 	missIndex      = barIndex - 2
 	timeIndex      = 2
@@ -25,9 +25,8 @@ var (
 	shortcutsIndex = 38
 	roundLength    = 30 * time.Second
 	debugString    = ""
-	defaultKeys    = []string{"j", "k", "l", ";"}
-	halfSymbol     = ">"
-	fullSymbol     = "v"
+	keys           = "jkl;"
+	keyColors      = []string{colors.GreenBackground, colors.RedBackground, colors.YellowBackground, colors.BlueBackground}
 	flame          = `
   )
  ) \
@@ -43,7 +42,7 @@ type Game struct {
 	width            int
 	height           int
 	screen           []string
-	keys             []string
+	keys             string
 	highscores       *highscores.Highscores
 	stats            *stats.Stats
 	stopChan         chan int
@@ -63,12 +62,12 @@ func New(n string) *Game {
 
 	return &Game{
 		name:             n,
-		fps:              defaultFps,
+		fps:              fps,
 		timeLeft:         roundLength,
 		width:            tw,
 		height:           sh,
 		screen:           []string{},
-		keys:             defaultKeys,
+		keys:             keys,
 		stats:            stats.New(),
 		highscores:       highscores.New(),
 		stopChan:         make(chan int, 1),
@@ -93,7 +92,9 @@ func (g *Game) KeyPressed(k string) {
 		g.Restart()
 		return
 	case "p":
-		g.PauseUnpause()
+		if !g.Finished() {
+			g.PauseUnpause()
+		}
 		return
 	}
 
@@ -103,18 +104,28 @@ func (g *Game) KeyPressed(k string) {
 
 	g.updateScore(k)
 
-	// Rerender to skip frame logic
+	// Rerender to skip frame logic, but provide instant update
 	g.rerenderFrame()
 }
 
 func (g *Game) updateScore(k string) {
+
 	full := g.screen[barIndex]
 	belowHalf := g.screen[barIndex-1]
 	aboveHalf := g.screen[barIndex+1]
 
 	// Check wrong key and invalid key
-	wrongKey := !strings.Contains((full + belowHalf + aboveHalf), k)
-	invalidKey := !strings.Contains(strings.Join(g.keys, ""), k)
+	colorIndex := strings.Index(keys, k)
+	invalidKey := false
+	wrongKey := false
+	c := ""
+	if colorIndex == -1 {
+		invalidKey = true
+	} else {
+		c = keyColors[colorIndex]
+		wrongKey = !strings.Contains((full + belowHalf + aboveHalf), c)
+	}
+
 	if invalidKey || wrongKey {
 		g.stats.Incorrect()
 		return
@@ -123,34 +134,26 @@ func (g *Game) updateScore(k string) {
 	// From here on the note was correct
 	g.stats.Correct()
 
+	// Remove the note
+	cString := fmt.Sprintf("%s %s", c, colors.Normal)
+
 	// Check half below
-	if strings.Contains(belowHalf, k) {
-		// Mark the note as hit
-		g.changeLine(barIndex-1, strings.Replace(g.screen[barIndex-1], k, halfSymbol, 1))
-
-		// Remove k from next half point string to prevent double count
-		aboveHalf = strings.Replace(aboveHalf, k, "", 1)
-		full = strings.Replace(full, k, "", 1)
-
+	if strings.Contains(belowHalf, cString) {
+		g.changeLine(barIndex-1, strings.Replace(g.screen[barIndex-1], cString, " ", 1))
 		g.stats.Add(stats.Half)
+		return
 	}
 
 	// Check full
-	if strings.Contains(full, k) {
-		// Mark the note as hit
-		g.changeLine(barIndex, strings.Replace(g.screen[barIndex], k, fullSymbol, 1))
-
+	if strings.Contains(full, cString) {
+		g.changeLine(barIndex, strings.Replace(g.screen[barIndex], cString, " ", 1))
 		g.stats.Add(stats.Full)
-
-		// Remove k from the half point strings to prevent double count
-		aboveHalf = strings.Replace(aboveHalf, k, "", 1)
+		return
 	}
 
 	// Check half above
-	if strings.Contains(aboveHalf, k) {
-		// Mark the note as hit
-		g.changeLine(barIndex+1, strings.Replace(g.screen[barIndex+1], k, halfSymbol, 1))
-
+	if strings.Contains(aboveHalf, cString) {
+		g.changeLine(barIndex+1, strings.Replace(g.screen[barIndex+1], cString, " ", 1))
 		g.stats.Add(stats.Half)
 	}
 }
@@ -175,11 +178,11 @@ func (g *Game) appendRandomNote() {
 	line := ""
 
 	keyIdx := rand.Intn(len(g.keys))
-	key := g.keys[keyIdx]
-	for j := 0; j < len(g.keys); j++ {
+	//key := g.keys[keyIdx]
+	for i := 0; i < len(g.keys); i++ {
 		curKey := " "
-		if j == keyIdx {
-			curKey = key
+		if i == keyIdx {
+			curKey = colors.Color(curKey, keyColors[i])
 		}
 		line += fmt.Sprintf("| %s ", curKey)
 	}
@@ -217,6 +220,11 @@ func (g *Game) render() {
 		if i == barIndex+1 || i == barIndex-1 { // Draw the horizontal lines
 			line = strings.Replace(g.screen[i], " ", "-", -1)
 		}
+		if i == barIndex {
+			for j := 0; j < len(keys); j++ {
+				line = strings.Replace(line, "   ", fmt.Sprintf(" %s ", string(keys[j])), 1)
+			}
+		}
 
 		var sidebar string
 		if i == scoreIndex {
@@ -232,13 +240,13 @@ func (g *Game) render() {
 			sidebar = "Shortcuts:"
 		}
 		if i == shortcutsIndex-1 {
-			sidebar = fmt.Sprintf("(r) restart")
+			sidebar = fmt.Sprintf(colors.Color("(r) restart", colors.Red))
 		}
 		if i == shortcutsIndex-2 {
-			sidebar = fmt.Sprintf("(q) quit")
+			sidebar = fmt.Sprintf(colors.Color("(q) quit", colors.Red))
 		}
 		if i == shortcutsIndex-3 {
-			sidebar = fmt.Sprintf("(p) pause/resume")
+			sidebar = fmt.Sprintf(colors.Color("(p) pause/resume", colors.Red))
 		}
 		if i == debugIndex {
 			sidebar = fmt.Sprintf("%s", debugString)
@@ -262,14 +270,9 @@ func (g *Game) render() {
 func (g *Game) frameLogic() {
 	// Check misses
 	missLine := g.screen[missIndex]
-	miss := strings.ContainsAny(missLine, strings.Join(g.keys, ""))
+	miss := strings.Contains(missLine, "\x1b")
 	if miss {
 		g.stats.Incorrect()
-	}
-
-	// Count total notes
-	if strings.ContainsAny(missLine, strings.Join(g.keys, "")) {
-		g.stats.TotalNotesAdd(1)
 	}
 }
 
@@ -280,25 +283,17 @@ func (g *Game) trim() {
 	}
 }
 
-func getTerminalDims() (int, int, error) {
+func getTerminalDims() (h int, w int, err error) {
 	cmd := exec.Command("stty", "size")
 	cmd.Stdin = os.Stdin // stty uses ioctl on stdin filedescriptor to ask kernel for terminal size, supply parent's stdin to get correct size
 	b, err := cmd.Output()
 	if err != nil {
 		return 0, 0, err
 	}
-	res := strings.Split(strings.TrimSpace(string(b)), " ")
-
-	w, err := strconv.Atoi(res[1])
+	_, err = fmt.Sscanf(string(b), "%d %d\n", &h, &w)
 	if err != nil {
 		return 0, 0, err
 	}
-
-	h, err := strconv.Atoi(res[0])
-	if err != nil {
-		return 0, 0, err
-	}
-
 	return w, h, err
 }
 
@@ -311,10 +306,7 @@ func (g *Game) Restart() {
 }
 
 func (g *Game) PauseUnpause() {
-	if !g.Finished() { // Game is not finished (which also uses pause = true for now)
-		g.paused = !g.paused
-		g.pauseUnpauseChan <- 1
-	}
+	g.pauseUnpauseChan <- 1
 }
 
 func (g *Game) Loop() {
@@ -334,18 +326,19 @@ func (g *Game) Loop() {
 
 			g.advanceFrame()
 
-			if g.Finshed() {
-				t = nil // Stop ticking
-				g.paused = true
+			if g.Finished() {
+				g.PauseUnpause()
 				g.showFinalScreen()
 			}
 			break
 		case <-g.pauseUnpauseChan:
+			g.paused = !g.paused
 			if t == nil {
 				t = time.Tick(frameLength)
 			} else {
 				t = nil
 			}
+			break
 		case <-g.stopChan:
 			return
 		case <-g.restartChan:
@@ -357,7 +350,7 @@ func (g *Game) Loop() {
 	}
 }
 
-func (g *Game) Finished() {
+func (g *Game) Finished() bool {
 	return g.timeLeft <= 0
 }
 
