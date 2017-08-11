@@ -114,22 +114,22 @@ func (g *Game) KeyPressed(k string) {
 	g.rerenderFrame()
 }
 
-func (g *Game) updateScore(k string) {
+func (g *Game) updateScore(key string) {
 
 	full := g.screen[barIndex]
 	belowHalf := g.screen[barIndex-1]
 	aboveHalf := g.screen[barIndex+1]
 
 	// Check wrong key and invalid key
-	colorIndex := strings.Index(keys, k)
+	colorIndex := strings.Index(keys, key)
 	invalidKey := false
 	wrongKey := false
-	c := ""
+	keyColor := ""
 	if colorIndex == -1 {
 		invalidKey = true
 	} else {
-		c = keyColors[colorIndex]
-		wrongKey = !strings.Contains((full + belowHalf + aboveHalf), c)
+		keyColor = keyColors[colorIndex]
+		wrongKey = !strings.Contains(fmt.Sprintf("%s%s%s", full, belowHalf, aboveHalf), keyColor)
 	}
 
 	if invalidKey || wrongKey {
@@ -141,25 +141,25 @@ func (g *Game) updateScore(k string) {
 	g.stats.Correct()
 
 	// Remove the note
-	cString := fmt.Sprintf("%s %s", c, colors.Normal)
+	colorString := fmt.Sprintf("%s %s", keyColor, colors.Normal)
 
 	// Check half below
-	if strings.Contains(belowHalf, cString) {
-		g.changeLine(barIndex-1, strings.Replace(g.screen[barIndex-1], cString, " ", 1))
+	if strings.Contains(belowHalf, colorString) {
+		g.changeLine(barIndex-1, strings.Replace(g.screen[barIndex-1], colorString, " ", 1))
 		g.stats.Add(stats.Half)
 		return
 	}
 
 	// Check full
-	if strings.Contains(full, cString) {
-		g.changeLine(barIndex, strings.Replace(g.screen[barIndex], cString, " ", 1))
+	if strings.Contains(full, colorString) {
+		g.changeLine(barIndex, strings.Replace(g.screen[barIndex], colorString, " ", 1))
 		g.stats.Add(stats.Full)
 		return
 	}
 
 	// Check half above
-	if strings.Contains(aboveHalf, cString) {
-		g.changeLine(barIndex+1, strings.Replace(g.screen[barIndex+1], cString, " ", 1))
+	if strings.Contains(aboveHalf, colorString) {
+		g.changeLine(barIndex+1, strings.Replace(g.screen[barIndex+1], colorString, " ", 1))
 		g.stats.Add(stats.Half)
 	}
 }
@@ -242,7 +242,7 @@ func (g *Game) render() {
 		if i == streakIndex {
 			sidebar = fmt.Sprintf("%d (%dx)", g.stats.Streak, g.stats.Multiplier())
 		}
-		if i == shortcutsIndex {
+		if i == shortcutsIndex { // TODO:Refactor to allow for more
 			sidebar = "Shortcuts:"
 		}
 		if i == shortcutsIndex-1 {
