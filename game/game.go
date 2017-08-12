@@ -32,7 +32,7 @@ var (
 	scoreIndex     = barIndex
 	streakIndex    = barIndex + 1
 	flameIndex     = barIndex + 2
-	shortcutsIndex = barIndex + 10
+	shortcutsIndex = barIndex + 15
 	shortcuts      = []string{
 		"Shortcuts:",
 		"(r) restart",

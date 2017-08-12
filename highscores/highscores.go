@@ -73,10 +73,10 @@ func (h *Highscores) serialize() string {
 	return res.String()
 }
 
-func (h *Highscores) Add(n string, s, sp, c, t int) {
+func (h *Highscores) Add(n string, p, s, c, t int) {
 	hs := highscore{
 		name:    n,
-		speed:   sp,
+		speed:   p,
 		score:   s,
 		correct: c,
 		total:   t,
@@ -105,7 +105,7 @@ func (h *Highscores) String(speed int) string {
 	for i := 0; i < int(math.Min(float64(showN), float64(len(filteredEntries)))); i++ {
 		hs := filteredEntries[i]
 		count += 1
-		res.WriteString(fmt.Sprintf("  %d. %s\t%d (%d/%d)\n", count, hs.name, hs.score, hs.correct, hs.total))
+		res.WriteString(fmt.Sprintf("  %d. %s %d (%d/%d)\n", count, hs.name, hs.score, hs.correct, hs.total))
 	}
 	return res.String()
 }
