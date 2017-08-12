@@ -83,7 +83,7 @@ func New(n string, w, h int) *Game {
 		quitChan:         make(chan int, 1),
 		restartChan:      make(chan int, 1),
 		pauseUnpauseChan: make(chan int, 1),
-		paused:           false,
+		paused:           true,
 	}
 }
 
@@ -173,7 +173,10 @@ func (g *Game) updateScore(key string) {
 func (g *Game) Initialize() {
 	Clear()
 
-	g.frameTicker = time.Tick(g.FrameLength())
+	if g.paused {
+		g.PauseUnpause()
+	}
+
 	g.timeLeft = roundLength
 	g.stats = stats.New()
 
@@ -195,7 +198,6 @@ func (g *Game) appendRandomNote() {
 	line := ""
 
 	keyIdx := rand.Intn(len(g.keys))
-	//key := g.keys[keyIdx]
 	for i := 0; i < len(g.keys); i++ {
 		curKey := " "
 		if i == keyIdx {
@@ -236,11 +238,13 @@ func (g *Game) render() {
 	for i := g.height - 1; i >= 0; i-- {
 		line := g.screen[i]
 		if i == barIndex+1 || i == barIndex-1 { // Draw the horizontal lines
-			line = strings.Replace(g.screen[i], " ", "-", -1)
+			line = strings.Replace(line, " ", "-", -1)
 		}
+
 		if i == barIndex {
+			// Draw the keys (in such a way that they may be coloured if a note passes)
 			for j := 0; j < len(keys); j++ {
-				line = strings.Replace(line, "   ", fmt.Sprintf(" %s ", string(keys[j])), 1)
+				line = replaceNth(line, " ", string(keys[j]), 2+2*j)
 			}
 		}
 
@@ -385,4 +389,20 @@ func Clear() {
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
 	cmd.Run()
+}
+
+func replaceNth(s, old, new string, n int) string {
+	i := 0
+	for m := 1; m <= n; m++ {
+		x := strings.Index(s[i:], old)
+		if x < 0 {
+			break
+		}
+		i += x
+		if m == n {
+			return s[:i] + new + s[i+len(old):]
+		}
+		i += len(old)
+	}
+	return s
 }
