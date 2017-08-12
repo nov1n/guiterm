@@ -26,22 +26,31 @@ var (
 	// Indexes
 	debugIndex     = 0
 	barIndex       = 3
+	speedIndex     = barIndex - 2
 	missIndex      = barIndex - 2
 	timeIndex      = barIndex - 1
 	scoreIndex     = barIndex
 	streakIndex    = barIndex + 1
 	flameIndex     = barIndex + 2
 	shortcutsIndex = barIndex + 10
+	shortcuts      = []string{
+		"Shortcuts:",
+		"(r) restart",
+		"(q) quit",
+		"(p) pause/resume",
+		"(a) increase speed",
+		"(z) decrease speed ",
+	}
 
 	// Defaults
-	roundLength = 30 * time.Second
-	fps         = 7 // speed
-	difficulty  = 6 // [0,10)
+	roundLength  = 30 * time.Second
+	defaultSpeed = 7 // speed
+	difficulty   = 6 // [0,10)
 )
 
 type Game struct {
 	name             string
-	fps              int
+	speed            int
 	difficulty       int
 	timeLeft         time.Duration
 	width            int
@@ -53,40 +62,29 @@ type Game struct {
 	quitChan         chan int
 	restartChan      chan int
 	pauseUnpauseChan chan int
+	frameTicker      <-chan time.Time
 	paused           bool
 }
 
-func New(n string) *Game {
+func New(n string, w, h int) *Game {
+	// Seed the random package to prevent default seed of 1
 	rand.Seed(time.Now().UTC().UnixNano())
-	tw, th, err := getTerminalDims()
-	if err != nil {
-		panic(err)
-	}
-
-	sh := th - 2 // allow 2 lines for user input
 
 	return &Game{
 		name:             n,
-		fps:              fps,
+		speed:            defaultSpeed,
 		difficulty:       difficulty,
 		timeLeft:         roundLength,
-		width:            tw,
-		height:           sh,
+		width:            w,
+		height:           h,
 		screen:           []string{},
 		keys:             keys,
-		stats:            stats.New(),
 		highscores:       highscores.New(),
 		quitChan:         make(chan int, 1),
 		restartChan:      make(chan int, 1),
 		pauseUnpauseChan: make(chan int, 1),
 		paused:           false,
 	}
-}
-
-func (g *Game) clear() {
-	cmd := exec.Command("clear")
-	cmd.Stdout = os.Stdout
-	cmd.Run()
 }
 
 func (g *Game) KeyPressed(k string) {
@@ -101,6 +99,14 @@ func (g *Game) KeyPressed(k string) {
 		if !g.Finished() {
 			g.PauseUnpause()
 		}
+		return
+	case "a":
+		g.speed += 1
+		g.Restart()
+		return
+	case "z":
+		g.speed -= 1
+		g.Restart()
 		return
 	}
 
@@ -165,7 +171,12 @@ func (g *Game) updateScore(key string) {
 }
 
 func (g *Game) Initialize() {
-	g.clear()
+	Clear()
+
+	g.frameTicker = time.Tick(g.FrameLength())
+	g.timeLeft = roundLength
+	g.stats = stats.New()
+
 	for i := 0; i < g.height; i++ {
 		g.appendFret()
 	}
@@ -221,6 +232,7 @@ func (g *Game) rerenderFrame() {
 }
 
 func (g *Game) render() {
+	fmt.Println()
 	for i := g.height - 1; i >= 0; i-- {
 		line := g.screen[i]
 		if i == barIndex+1 || i == barIndex-1 { // Draw the horizontal lines
@@ -242,17 +254,13 @@ func (g *Game) render() {
 		if i == streakIndex {
 			sidebar = fmt.Sprintf("%d (%dx)", g.stats.Streak, g.stats.Multiplier())
 		}
-		if i == shortcutsIndex { // TODO:Refactor to allow for more
-			sidebar = "Shortcuts:"
+		if i == speedIndex {
+			sidebar = fmt.Sprintf("speed: %d", g.speed)
 		}
-		if i == shortcutsIndex-1 {
-			sidebar = "(r) restart"
-		}
-		if i == shortcutsIndex-2 {
-			sidebar = "(q) quit"
-		}
-		if i == shortcutsIndex-3 {
-			sidebar = "(p) pause/resume"
+		for j := 0; j < len(shortcuts); j++ {
+			if i == shortcutsIndex-j {
+				sidebar = shortcuts[j]
+			}
 		}
 		if i == debugIndex {
 			sidebar = fmt.Sprintf("%s", debugString)
@@ -278,10 +286,12 @@ func (g *Game) render() {
 			}
 		}
 
-		//fmt.Printf("%s % 10d   %s\n", line, i, sidebar)
-		fmt.Printf("%s  %s\n", line, sidebar)
+		fmt.Printf("  %s  %s", line, sidebar)
+
+		if i != 0 { // Skip the last newline to allow for 'full screen'
+			fmt.Println()
+		}
 	}
-	fmt.Println("") // Gives one extra whitespace at the bottom
 }
 
 // Called once before every frame is rendered
@@ -301,20 +311,6 @@ func (g *Game) trim() {
 	}
 }
 
-func getTerminalDims() (h int, w int, err error) {
-	cmd := exec.Command("stty", "size")
-	cmd.Stdin = os.Stdin // stty uses ioctl on stdin filedescriptor to ask kernel for terminal size, supply parent's stdin to get correct size
-	b, err := cmd.Output()
-	if err != nil {
-		return 0, 0, err
-	}
-	_, err = fmt.Sscanf(string(b), "%d %d\n", &h, &w)
-	if err != nil {
-		return 0, 0, err
-	}
-	return w, h, err
-}
-
 func (g *Game) Stop() {
 	g.quitChan <- 1
 }
@@ -327,23 +323,21 @@ func (g *Game) PauseUnpause() {
 	g.pauseUnpauseChan <- 1
 }
 
-func (g *Game) Loop() {
-	frameLength := time.Duration(1000/g.fps) * time.Millisecond
-	t := time.Tick(frameLength)
+func (g *Game) FrameLength() time.Duration {
+	return time.Duration(1000/g.speed) * time.Millisecond
+}
 
+func (g *Game) Loop() {
 	for {
 		select {
-		case <-t:
+		case <-g.frameTicker:
 			if rand.Intn(10) > (10 - difficulty) {
 				g.appendRandomNote()
 			} else {
 				g.appendFret()
 			}
-
-			g.timeLeft -= frameLength
-
+			g.timeLeft -= g.FrameLength()
 			g.advanceFrame()
-
 			if g.Finished() {
 				g.PauseUnpause()
 				g.showFinalScreen()
@@ -351,21 +345,17 @@ func (g *Game) Loop() {
 			break
 		case <-g.pauseUnpauseChan:
 			g.paused = !g.paused
-			if t == nil {
-				t = time.Tick(frameLength)
+			if g.frameTicker == nil {
+				g.frameTicker = time.Tick(g.FrameLength())
 			} else {
-				t = nil
+				g.frameTicker = nil
 			}
 			break
 		case <-g.quitChan:
-			// Reset terminfo
-			fmt.Print(colors.Color("", colors.Normal))
 			return
 		case <-g.restartChan:
-			*g = *New(g.name) // Reassign main's reference to game to a new one
 			g.Initialize()
-			g.Loop()
-			return
+			break
 		}
 	}
 }
@@ -375,19 +365,24 @@ func (g *Game) Finished() bool {
 }
 
 func (g *Game) showFinalScreen() {
-	g.clear()
+	Clear()
 
 	fmt.Printf("Congratulations, your score was %d (%d%%)!\n", g.stats.Score, g.stats.Accuracy())
-	fmt.Printf("Correct: %d, Mistakes: %d, Total: %d\n", g.stats.CorrectNotes, g.stats.MistakenNotes, g.stats.TotalNotes)
-	fmt.Println()
+	fmt.Printf("Correct: %d, Mistakes: %d, Total: %d\n\n", g.stats.CorrectNotes, g.stats.MistakenNotes, g.stats.TotalNotes)
 
-	g.highscores.Add(g.name, g.stats.Score, g.stats.CorrectNotes, g.stats.TotalNotes)
-	fmt.Println(g.highscores.String())
+	// Add current score to highscores
+	g.highscores.Add(g.name, g.speed, g.stats.Score, g.stats.CorrectNotes, g.stats.TotalNotes)
 
-	fmt.Println()
-	fmt.Println("Press 'r' to restart or 'q' to quit.")
+	// Show highscores
+	fmt.Printf("%s\n\n\nPress 'r' to restart or 'q' to quit.", g.highscores.String(g.speed))
 }
 
 func debug(s interface{}) {
 	debugString = fmt.Sprintf("%v", s)
+}
+
+func Clear() {
+	cmd := exec.Command("clear")
+	cmd.Stdout = os.Stdout
+	cmd.Run()
 }

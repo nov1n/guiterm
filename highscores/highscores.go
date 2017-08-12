@@ -18,13 +18,14 @@ var (
 
 type highscore struct {
 	name    string
+	speed   int
 	score   int
 	correct int
 	total   int
 }
 
 func (h highscore) serialize() string {
-	return fmt.Sprintf("%s,%d,%d,%d\n", h.name, h.score, h.correct, h.total)
+	return fmt.Sprintf("%s,%d,%d,%d,%d\n", h.name, h.speed, h.score, h.correct, h.total)
 }
 
 func deserialize(s string) highscore {
@@ -33,7 +34,7 @@ func deserialize(s string) highscore {
 	nameEndIdx := strings.Index(s, ",")
 	h.name = s[:nameEndIdx]
 
-	_, err := fmt.Sscanf(s[nameEndIdx+1:], "%d,%d,%d", &h.score, &h.correct, &h.total)
+	_, err := fmt.Sscanf(s[nameEndIdx+1:], "%d,%d,%d,%d", &h.speed, &h.score, &h.correct, &h.total)
 	if err != nil {
 		panic(err)
 	}
@@ -72,9 +73,10 @@ func (h *Highscores) serialize() string {
 	return res.String()
 }
 
-func (h *Highscores) Add(n string, s, c, t int) {
+func (h *Highscores) Add(n string, s, sp, c, t int) {
 	hs := highscore{
 		name:    n,
+		speed:   sp,
 		score:   s,
 		correct: c,
 		total:   t,
@@ -94,17 +96,27 @@ func (h *Highscores) save() {
 	f.WriteString(h.serialize())
 }
 
-func (h *Highscores) String() string {
+func (h *Highscores) String(speed int) string {
 	var res bytes.Buffer
-	res.WriteString("Highscores:\n")
+	res.WriteString(fmt.Sprintf("Highscores for speed %d:\n", speed))
 
 	count := 0
-	for i := 0; i < int(math.Min(float64(showN), float64(len(h.entries)))); i++ {
-		hs := h.entries[i]
+	filteredEntries := h.filterSpeed(speed)
+	for i := 0; i < int(math.Min(float64(showN), float64(len(filteredEntries)))); i++ {
+		hs := filteredEntries[i]
 		count += 1
-		res.WriteString(fmt.Sprintf("  %d. %s %d (%d/%d)\n", count, hs.name, hs.score, hs.correct, hs.total))
+		res.WriteString(fmt.Sprintf("  %d. %s\t%d (%d/%d)\n", count, hs.name, hs.score, hs.correct, hs.total))
 	}
 	return res.String()
+}
+
+func (h *Highscores) filterSpeed(speed int) (res []highscore) {
+	for i := 0; i < len(h.entries); i++ {
+		if h.entries[i].speed == speed {
+			res = append(res, h.entries[i])
+		}
+	}
+	return
 }
 
 func (h *Highscores) Len() int {
