@@ -1,0 +1,10 @@
+- [x] highscores
+- [x] stats
+- [x] hotkeys
+- [x] colors
+- [x] star power
+- [x] restart
+- [x] different speeds
+- [ ] 2 player
+- [ ] global highscores
+- [ ] music
