@@ -178,7 +178,6 @@ func (g *Game) Initialize() {
 		g.PauseUnpause()
 	}
 
-	g.frameTicker = time.Tick(g.FrameLength()) // TODO: figure out why this doesn't work
 	g.timeLeft = roundLength
 	g.stats = stats.New()
 
@@ -337,6 +336,7 @@ func (g *Game) Loop() {
 	for {
 		select {
 		case <-g.frameTicker:
+			fmt.Print(g.frameTicker, g.paused)
 			if rand.Intn(10) > (10 - difficulty) {
 				g.appendRandomNote()
 			} else {
@@ -350,12 +350,12 @@ func (g *Game) Loop() {
 			}
 			break
 		case <-g.pauseUnpauseChan:
-			g.paused = !g.paused
-			if g.frameTicker == nil {
+			if g.paused {
 				g.frameTicker = time.Tick(g.FrameLength())
 			} else {
 				g.frameTicker = nil
 			}
+			g.paused = !g.paused
 			break
 		case <-g.quitChan:
 			return
