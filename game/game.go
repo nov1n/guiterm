@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -101,11 +102,11 @@ func (g *Game) KeyPressed(k string) {
 		}
 		return
 	case "a":
-		g.speed += 1
+		g.speed = int(math.Min(float64(g.speed+1), 12))
 		g.Restart()
 		return
 	case "z":
-		g.speed -= 1
+		g.speed = int(math.Max(float64(g.speed-1), 1))
 		g.Restart()
 		return
 	}
@@ -177,6 +178,7 @@ func (g *Game) Initialize() {
 		g.PauseUnpause()
 	}
 
+	g.frameTicker = time.Tick(g.FrameLength()) // TODO: figure out why this doesn't work
 	g.timeLeft = roundLength
 	g.stats = stats.New()
 
