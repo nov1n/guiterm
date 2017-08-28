@@ -8,3 +8,4 @@
 - [ ] 2 player
 - [ ] global highscores
 - [ ] music
+- [ ] powerups

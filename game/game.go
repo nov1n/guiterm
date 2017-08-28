@@ -45,8 +45,8 @@ var (
 
 	// Defaults
 	roundLength  = 30 * time.Second
-	defaultSpeed = 7 // speed
-	difficulty   = 6 // [0,10)
+	defaultSpeed = 10 // speed
+	difficulty   = 6  // [0,12)
 )
 
 type Game struct {
@@ -103,10 +103,12 @@ func (g *Game) KeyPressed(k string) {
 		return
 	case "a":
 		g.speed = int(math.Min(float64(g.speed+1), 12))
+		g.frameTicker = time.Tick(g.FrameLength()) // Update ticker
 		g.Restart()
 		return
 	case "z":
 		g.speed = int(math.Max(float64(g.speed-1), 1))
+		g.frameTicker = time.Tick(g.FrameLength())
 		g.Restart()
 		return
 	}
@@ -174,7 +176,7 @@ func (g *Game) updateScore(key string) {
 func (g *Game) Initialize() {
 	Clear()
 
-	if g.paused {
+	if g.paused { // Properly unpause on restart
 		g.PauseUnpause()
 	}
 
@@ -336,7 +338,6 @@ func (g *Game) Loop() {
 	for {
 		select {
 		case <-g.frameTicker:
-			fmt.Print(g.frameTicker, g.paused)
 			if rand.Intn(10) > (10 - difficulty) {
 				g.appendRandomNote()
 			} else {
