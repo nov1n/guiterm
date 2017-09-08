@@ -45,8 +45,8 @@ var (
 
 	// Defaults
 	roundLength  = 30 * time.Second
-	defaultSpeed = 10 // speed
-	difficulty   = 6  // [0,12)
+	defaultSpeed = 7 // speed
+	difficulty   = 6 // [0,12)
 )
 
 type Game struct {
